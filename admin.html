@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>Link Hub · Admin</title>
+<meta name="theme-color" content="#070b1a">
+<style>
+  :root{--bg:#070b1a;--bg2:#0d1430;--text:#eef2ff;--muted:#98a2c7;--blue:#3b82f6;--purple:#8b5cf6;--cyan:#22d3ee;--red:#f87171;--green:#4ade80;--glass:rgba(255,255,255,.06);--glass-b:rgba(255,255,255,.12);--grad:linear-gradient(135deg,var(--blue),var(--purple))}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:radial-gradient(1200px 700px at 50% -10%,var(--bg2),var(--bg)) fixed;color:var(--text);min-height:100vh;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+  a{color:var(--cyan)}
+  .top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 18px;border-bottom:1px solid var(--glass-b);position:sticky;top:0;background:rgba(7,11,26,.9);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);z-index:5}
+  .top b{font-size:17px}
+  .layout{display:grid;grid-template-columns:300px 1fr;gap:18px;padding:18px;max-width:1200px;margin:0 auto}
+  @media(max-width:860px){.layout{grid-template-columns:1fr}}
+  .card{background:var(--glass);border:1px solid var(--glass-b);border-radius:16px;padding:16px;margin-bottom:16px}
+  h2{font-size:17px;margin-bottom:10px}
+  h3{font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+  small,.muted{color:var(--muted);font-size:13px;line-height:1.5}
+  input[type=text],input[type=email],input[type=password],textarea{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--glass-b);background:rgba(255,255,255,.05);color:var(--text);font:inherit;font-size:14px;margin-bottom:8px}
+  textarea{min-height:90px;resize:vertical}
+  input:focus,textarea:focus{outline:none;border-color:var(--purple)}
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border-radius:10px;border:1px solid var(--glass-b);background:var(--glass);color:var(--text);font:inherit;font-size:14px;font-weight:600;cursor:pointer;text-decoration:none}
+  .btn:hover{filter:brightness(1.2)}
+  .btn.primary{background:var(--grad);border-color:transparent}
+  .btn.danger{border-color:rgba(248,113,113,.5);color:var(--red)}
+  .btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+  .client{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;border:1px solid var(--glass-b);margin-bottom:8px;cursor:pointer;background:rgba(255,255,255,.03)}
+  .client:hover,.client.sel{border-color:var(--purple);background:rgba(139,92,246,.12)}
+  .client .n{font-weight:600;font-size:14px}
+  .client .s{font-size:12px;color:var(--muted)}
+  .badge{background:var(--grad);border-radius:999px;font-size:12px;font-weight:700;padding:2px 8px}
+  .off{opacity:.55}
+  .row{display:flex;gap:8px;align-items:flex-start;margin-bottom:10px;padding:10px;border:1px solid var(--glass-b);border-radius:12px;background:rgba(255,255,255,.03)}
+  .row .f{flex:1;min-width:0}
+  .row .f input{margin-bottom:6px}
+  .row .u{font-size:12px;color:var(--cyan);word-break:break-all;margin-bottom:6px}
+  .mini{width:30px;height:30px;border-radius:8px;border:1px solid var(--glass-b);background:var(--glass);color:var(--text);cursor:pointer;font-size:13px}
+  .mini:hover{background:var(--grad)}
+  .col{display:flex;flex-direction:column;gap:4px}
+  .tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:2px 8px;border-radius:999px;border:1px solid var(--glass-b);color:var(--muted);margin-bottom:6px}
+  #toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#12183a;border:1px solid var(--glass-b);padding:11px 18px;border-radius:12px;font-size:14px;z-index:20;max-width:92%;display:none}
+  #toast.bad{border-color:var(--red);color:var(--red)} #toast.ok{border-color:var(--green)}
+  .login{max-width:380px;margin:12vh auto 0;padding:0 18px}
+  label.chk{display:flex;gap:8px;align-items:center;font-size:14px;margin:6px 0 10px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast"></div>
+
+<script src="settings.js"></script>
+<script>
+(function(){
+  'use strict';
+  var S = window.SITE_SETTINGS || {};
+  var app = document.getElementById('app');
+  var BASE = location.href.split('#')[0].split('?')[0].replace(/[^\/]*$/,'');
+  var SKEY = 'linkhub-admin-session';
+  var session = null;
+  try{ session = JSON.parse(sessionStorage.getItem(SKEY)||'null'); }catch(e){}
+  var state = { clients:[], pending:{}, curId:null, cur:null };
+
+  /* ---------- tiny helpers ---------- */
+  function h(tag, props, kids){
+    var e=document.createElement(tag);
+    if(props) Object.keys(props).forEach(function(k){
+      var v=props[k];
+      if(k==='class') e.className=v;
+      else if(k==='text') e.textContent=v;
+      else if(k==='value'||k==='checked'||k==='disabled') e[k]=v;
+      else if(k.slice(0,2)==='on') e[k]=v;
+      else if(v!==false && v!=null) e.setAttribute(k,v);
+    });
+    (kids||[]).forEach(function(c){ if(c==null) return; e.appendChild(typeof c==='string'?document.createTextNode(c):c); });
+    return e;
+  }
+  var toastT;
+  function toast(t,cls){
+    var el=document.getElementById('toast'); el.textContent=t; el.className=cls||''; el.style.display='block';
+    clearTimeout(toastT); toastT=setTimeout(function(){ el.style.display='none'; },3800);
+  }
+  function copy(text,label){
+    if(navigator.clipboard) navigator.clipboard.writeText(text).then(function(){toast((label||'Copied')+' ✔','ok');},function(){prompt('Copy this:',text);});
+    else prompt('Copy this:',text);
+  }
+  function safeUrl(u){ try{ var x=new URL(u,location.href); return /^https?:$|^mailto:$|^tel:$/.test(x.protocol)?x.href:'#'; }catch(e){return '#';} }
+
+  /* ---------- link detection (same as the public site) ---------- */
+  var PLAT_NAME={instagram:'Instagram',youtube:'YouTube',tiktok:'TikTok'};
+  function detect(raw){
+    raw=String(raw||''); var m;
+    m=/https?:\/\/(?:www\.)?instagram\.com\/(?:[A-Za-z0-9_.]+\/)?(p|reels?|tv)\/([A-Za-z0-9_-]+)/i.exec(raw);
+    if(m){ var t=m[1].toLowerCase(); if(t==='reels') t='reel'; return {platform:'instagram',url:'https://www.instagram.com/'+t+'/'+m[2]+'/'}; }
+    m=/https?:\/\/(?:www\.|m\.)?youtube\.com\/shorts\/([A-Za-z0-9_-]{6,})/i.exec(raw);
+    if(m) return {platform:'youtube',id:m[1],short:true,url:'https://www.youtube.com/shorts/'+m[1]};
+    m=/https?:\/\/(?:www\.|m\.|music\.)?youtube\.com\/(?:watch\?(?:[^\s"'<>]*&)?v=|embed\/|live\/|v\/)([A-Za-z0-9_-]{6,})/i.exec(raw);
+    if(!m) m=/https?:\/\/youtu\.be\/([A-Za-z0-9_-]{6,})/i.exec(raw);
+    if(m) return {platform:'youtube',id:m[1],url:'https://www.youtube.com/watch?v='+m[1]};
+    m=/https?:\/\/(?:www\.|m\.)?tiktok\.com\/@([A-Za-z0-9_.-]+)\/video\/(\d+)/i.exec(raw);
+    if(m) return {platform:'tiktok',id:m[2],url:'https://www.tiktok.com/@'+m[1]+'/video/'+m[2]};
+    return null;
+  }
+  function parseAllVideos(text){
+    var out=[],seen={},urls=String(text||'').match(/https?:\/\/[^\s"'<>\\)]+/g)||[];
+    urls.forEach(function(u){ var d=detect(u); if(d && !seen[d.url]){ seen[d.url]=1; out.push(d); } });
+    return out;
+  }
+
+  /* ---------- database calls (Supabase REST, no library needed) ---------- */
+  var API = (S.supabaseUrl||'').replace(/\/+$/,'');
+  async function refresh(){
+    if(!session||!session.refresh_token) return false;
+    try{
+      var r=await fetch(API+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:S.supabaseKey,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:session.refresh_token})});
+      if(!r.ok) return false;
+      session=await r.json(); sessionStorage.setItem(SKEY,JSON.stringify(session)); return true;
+    }catch(e){ return false; }
+  }
+  async function api(path,opts){
+    opts=opts||{};
+    var headers={apikey:S.supabaseKey,'Content-Type':'application/json'};
+    if(session&&session.access_token) headers.Authorization='Bearer '+session.access_token;
+    if(opts.returning) headers.Prefer='return=representation';
+    var r=await fetch(API+path,{method:opts.method||'GET',headers:headers,body:opts.body?JSON.stringify(opts.body):undefined});
+    if(r.status===401 && !opts.retried && await refresh()){ opts.retried=true; return api(path,opts); }
+    if(r.status===401){ logout(true); throw new Error('Session expired — please log in again.'); }
+    if(!r.ok){ var t=await r.text(); throw new Error(t.slice(0,250)); }
+    var txt=await r.text(); return txt?JSON.parse(txt):null;
+  }
+  function logout(silent){
+    session=null; try{sessionStorage.removeItem(SKEY);}catch(e){}
+    state={clients:[],pending:{},curId:null,cur:null};
+    renderLogin(); if(silent) toast('Please log in again.','bad');
+  }
+
+  /* ---------- screens ---------- */
+  function renderSetupNeeded(){
+    app.innerHTML='';
+    app.appendChild(h('div',{class:'login'},[h('div',{class:'card'},[
+      h('h2',{text:'Database not connected yet'}),
+      h('p',{class:'muted',text:'Open settings.js and paste your Supabase URL and publishable key, then upload it to GitHub and refresh this page.'})
+    ])]));
+  }
+  function renderLogin(){
+    app.innerHTML='';
+    var email=h('input',{type:'email',placeholder:'Email',autocomplete:'username'});
+    var pass=h('input',{type:'password',placeholder:'Password',autocomplete:'current-password'});
+    var msg=h('div',{class:'muted',style:'min-height:20px;margin-top:8px'});
+    async function go(){
+      msg.textContent='Logging in…';
+      try{
+        var r=await fetch(API+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:S.supabaseKey,'Content-Type':'application/json'},body:JSON.stringify({email:email.value.trim(),password:pass.value})});
+        var d=await r.json();
+        if(!r.ok){ msg.textContent=d.error_description||d.msg||'Login failed.'; return; }
+        session=d; sessionStorage.setItem(SKEY,JSON.stringify(d));
+        await start();
+      }catch(e){ msg.textContent='Could not reach the database. Check settings.js.'; }
+    }
+    pass.onkeydown=function(e){ if(e.key==='Enter') go(); };
+    app.appendChild(h('div',{class:'login'},[h('div',{class:'card'},[
+      h('h2',{text:'🔐 Admin login'}), h('small',{text:'Only you can log in here.'}), h('div',{style:'height:12px'}),
+      email,pass,h('button',{class:'btn primary',onclick:go,text:'Log in'}),msg
+    ])]));
+  }
+
+  async function loadClients(){
+    state.clients=await api('/rest/v1/clients?select=id,slug,name,handle,active&order=created_at.desc');
+    var pend=await api('/rest/v1/submissions?status=eq.pending&select=client_id');
+    state.pending={}; pend.forEach(function(p){ state.pending[p.client_id]=(state.pending[p.client_id]||0)+1; });
+  }
+  async function openClient(id){
+    state.curId=id;
+    var rows=await api('/rest/v1/clients?id=eq.'+id+'&select=*,links(*),videos(*)&links.order=position.asc&videos.order=position.asc');
+    if(!rows.length){ state.cur=null; renderMain(); return; }
+    var c=rows[0];
+    var sec=await api('/rest/v1/client_secrets?client_id=eq.'+id+'&select=submit_code');
+    var subs=await api('/rest/v1/submissions?client_id=eq.'+id+'&status=eq.pending&order=created_at.asc');
+    state.cur={c:c,links:c.links||[],videos:c.videos||[],code:sec[0]?sec[0].submit_code:'',subs:subs};
+    renderMain();
+  }
+  async function refreshCurrent(){ await loadClients(); await openClient(state.curId); }
+
+  function wrap(fn){ return async function(){ try{ await fn.apply(null,arguments); }catch(e){ toast(e.message||'Something went wrong','bad'); } }; }
+  function nextPos(arr){ return arr.reduce(function(m,x){return Math.max(m,x.position||0);},0)+1; }
+
+  function renderMain(){
+    app.innerHTML='';
+    app.appendChild(h('div',{class:'top'},[
+      h('b',{text:'✨ Link Hub · Admin'}),
+      h('button',{class:'btn',onclick:function(){logout(false);},text:'Log out'})
+    ]));
+    var left=h('div'), right=h('div');
+    app.appendChild(h('div',{class:'layout'},[left,right]));
+
+    /* new client */
+    var slug=h('input',{type:'text',placeholder:'short-name (letters, numbers, - _)',autocapitalize:'none'});
+    var nm=h('input',{type:'text',placeholder:'Client name'});
+    left.appendChild(h('div',{class:'card'},[
+      h('h2',{text:'New client'}), slug, nm,
+      h('button',{class:'btn primary',text:'Create client',onclick:wrap(async function(){
+        var s=slug.value.trim().toLowerCase();
+        if(!/^[a-z0-9_-]{2,40}$/.test(s)){ toast('Short name: 2-40 letters, numbers, - or _ only.','bad'); return; }
+        var rows=await api('/rest/v1/clients',{method:'POST',body:{slug:s,name:nm.value.trim()},returning:true});
+        toast('Client created ✔','ok'); await loadClients(); await openClient(rows[0].id);
+      })})
+    ]));
+
+    /* client list */
+    var list=h('div',{class:'card'},[h('h2',{text:'Clients ('+state.clients.length+')'})]);
+    if(!state.clients.length) list.appendChild(h('small',{text:'No clients yet. Create your first one above.'}));
+    state.clients.forEach(function(c){
+      var n=state.pending[c.id]||0;
+      list.appendChild(h('div',{class:'client'+(c.id===state.curId?' sel':'')+(c.active?'':' off'),onclick:wrap(function(){return openClient(c.id);})},[
+        h('div',null,[h('div',{class:'n',text:c.name||c.slug}),h('div',{class:'s',text:'?c='+c.slug+(c.active?'':' · hidden')})]),
+        n?h('span',{class:'badge',text:n+' new'}):null
+      ]));
+    });
+    left.appendChild(list);
+
+    if(!state.cur){
+      right.appendChild(h('div',{class:'card'},[h('h2',{text:'Select or create a client'}),h('small',{text:'Everything for a client is edited here and saved straight to the live site — no files to upload.'})]));
+      return;
+    }
+    renderEditor(right);
+  }
+
+  function renderEditor(root){
+    var c=state.cur.c, links=state.cur.links, videos=state.cur.videos;
+    var pageUrl=BASE+'?c='+c.slug;
+    var submitUrl=BASE+'submit.html?c='+c.slug+'&code='+state.cur.code;
+
+    /* header */
+    var live=h('input',{type:'checkbox',checked:!!c.active});
+    root.appendChild(h('div',{class:'card'},[
+      h('h2',{text:(c.name||c.slug)}),
+      h('div',{class:'muted',text:pageUrl}),
+      h('div',{class:'btns'},[
+        h('a',{class:'btn primary',href:pageUrl,target:'_blank',rel:'noopener',text:'View page ↗'}),
+        h('button',{class:'btn',text:'Copy page link',onclick:function(){copy(pageUrl,'Page link copied');}}),
+        h('button',{class:'btn',text:'Copy client "send links" link',onclick:function(){copy(submitUrl,'Client link copied');}})
+      ]),
+      h('label',{class:'chk'},[live,h('span',{text:'Page is live (untick to hide it from visitors)'})]),
+      h('button',{class:'btn',text:'Save live/hidden',onclick:wrap(async function(){
+        await api('/rest/v1/clients?id=eq.'+c.id,{method:'PATCH',body:{active:live.checked}}); toast('Saved ✔','ok'); await refreshCurrent();
+      })}),
+      ' ',
+      h('button',{class:'btn danger',text:'Delete client',onclick:wrap(async function(){
+        if(!confirm('Delete "'+(c.name||c.slug)+'" and everything on their page? This cannot be undone.')) return;
+        await api('/rest/v1/clients?id=eq.'+c.id,{method:'DELETE'});
+        state.curId=null; state.cur=null; toast('Deleted','ok'); await loadClients(); renderMain();
+      })})
+    ]));
+
+    /* profile */
+    var f={name:h('input',{type:'text',placeholder:'Name',value:c.name||''}),
+           handle:h('input',{type:'text',placeholder:'@handle',value:c.handle||''}),
+           bio:h('textarea',{placeholder:'Short bio',text:c.bio||''}),
+           avatar:h('input',{type:'text',placeholder:'Avatar image URL (optional)',value:c.avatar||''}),
+           footer:h('input',{type:'text',placeholder:'Footer text (optional)',value:c.footer||''})};
+    f.bio.value=c.bio||'';
+    root.appendChild(h('div',{class:'card'},[
+      h('h3',{text:'Profile'}),f.name,f.handle,f.bio,f.avatar,f.footer,
+      h('button',{class:'btn primary',text:'Save profile',onclick:wrap(async function(){
+        await api('/rest/v1/clients?id=eq.'+c.id,{method:'PATCH',body:{name:f.name.value.trim(),handle:f.handle.value.trim(),bio:f.bio.value.trim(),avatar:f.avatar.value.trim(),footer:f.footer.value.trim()}});
+        toast('Profile saved ✔','ok'); await refreshCurrent();
+      })})
+    ]));
+
+    /* links */
+    var lcard=h('div',{class:'card'},[h('h3',{text:'Links (TikTok, YouTube, Snapchat, Threads, website…)'})]);
+    links.forEach(function(l,i){
+      var t=h('input',{type:'text',placeholder:'Title',value:l.title||''});
+      var u=h('input',{type:'text',placeholder:'https://…',value:l.url||''});
+      t.onchange=wrap(async function(){ await api('/rest/v1/links?id=eq.'+l.id,{method:'PATCH',body:{title:t.value.trim()}}); toast('Saved ✔','ok'); });
+      u.onchange=wrap(async function(){
+        if(!/^(https?:\/\/|mailto:|tel:)/i.test(u.value.trim())){ toast('Link must start with https://','bad'); u.value=l.url; return; }
+        await api('/rest/v1/links?id=eq.'+l.id,{method:'PATCH',body:{url:u.value.trim()}}); toast('Saved ✔','ok');
+      });
+      lcard.appendChild(h('div',{class:'row'},[h('div',{class:'f'},[t,u]),miniBtns(links,i,'links')]));
+    });
+    var nt=h('input',{type:'text',placeholder:'New link title'});
+    var nu=h('input',{type:'text',placeholder:'https://…'});
+    lcard.appendChild(h('div',{style:'margin-top:8px'},[nt,nu,h('button',{class:'btn primary',text:'+ Add link',onclick:wrap(async function(){
+      var url=nu.value.trim();
+      if(!/^(https?:\/\/|mailto:|tel:)/i.test(url)){ toast('Link must start with https://','bad'); return; }
+      await api('/rest/v1/links',{method:'POST',body:{client_id:c.id,title:nt.value.trim()||url.replace(/^https?:\/\/(www\.)?/,'').split('/')[0],url:url,position:nextPos(links)}});
+      toast('Link added ✔','ok'); await openClient(c.id);
+    })})]));
+    root.appendChild(lcard);
+
+    /* videos */
+    var vcard=h('div',{class:'card'},[h('h3',{text:'Videos (Instagram · YouTube · TikTok)'})]);
+    var paste=h('textarea',{placeholder:'Paste video links or embed codes here (many at once is fine)…'});
+    vcard.appendChild(paste);
+    vcard.appendChild(h('button',{class:'btn primary',text:'+ Add video(s)',onclick:wrap(async function(){
+      var text=paste.value, found=parseAllVideos(text);
+      if(!found.length){
+        var short=/vm\.tiktok\.com|tiktok\.com\/t\//i.test(text);
+        toast(short?'That is a short TikTok link. Open it in your browser first, then copy the full address (tiktok.com/@name/video/…).':'No Instagram, YouTube or TikTok video link found.','bad'); return;
+      }
+      var have={}; videos.forEach(function(v){have[v.url]=1;});
+      var fresh=found.filter(function(d){return !have[d.url];});
+      if(!fresh.length){ toast('Those videos are already added.','bad'); return; }
+      var pos=nextPos(videos);
+      await api('/rest/v1/videos',{method:'POST',body:fresh.map(function(d,i){return {client_id:c.id,url:d.url,platform:d.platform,position:pos+i};})});
+      toast(fresh.length+' video(s) added ✔','ok'); await openClient(c.id);
+    })}));
+    vcard.appendChild(h('div',{style:'height:14px'}));
+    videos.forEach(function(v,i){
+      var cap=h('input',{type:'text',placeholder:'Caption (optional)',value:v.caption||''});
+      cap.onchange=wrap(async function(){ await api('/rest/v1/videos?id=eq.'+v.id,{method:'PATCH',body:{caption:cap.value.trim()}}); toast('Saved ✔','ok'); });
+      vcard.appendChild(h('div',{class:'row'},[h('div',{class:'f'},[
+        h('span',{class:'tag',text:PLAT_NAME[v.platform]||v.platform}),
+        h('div',{class:'u'},[h('a',{href:safeUrl(v.url),target:'_blank',rel:'noopener',text:v.url.replace(/^https?:\/\/(www\.)?/,'')})]),cap
+      ]),miniBtns(videos,i,'videos')]));
+    });
+    if(!videos.length) vcard.appendChild(h('small',{text:'No videos yet.'}));
+    root.appendChild(vcard);
+
+    /* inbox */
+    var subs=state.cur.subs;
+    var icard=h('div',{class:'card'},[h('h3',{text:'Links sent by the client ('+subs.length+')'})]);
+    if(!subs.length) icard.appendChild(h('small',{text:'Nothing waiting. Give the client their "send links" link and new submissions appear here.'}));
+    subs.forEach(function(s){
+      var d=detect(s.url);
+      icard.appendChild(h('div',{class:'row'},[h('div',{class:'f'},[
+        h('span',{class:'tag',text:d?PLAT_NAME[d.platform]+' video':'Other link'}),
+        h('div',{class:'u'},[h('a',{href:safeUrl(s.url),target:'_blank',rel:'noopener',text:s.url})]),
+        s.note?h('small',{text:'Note: '+s.note}):null,
+        h('div',{class:'btns'},[
+          h('button',{class:'btn primary',text:'Approve',onclick:wrap(async function(){
+            if(d){
+              await api('/rest/v1/videos',{method:'POST',body:{client_id:c.id,url:d.url,platform:d.platform,position:nextPos(videos)}});
+            } else {
+              if(!/^https?:\/\//i.test(s.url)){ toast('Not a valid link.','bad'); return; }
+              var host=''; try{ host=new URL(s.url).hostname.replace(/^www\./,''); }catch(e){}
+              await api('/rest/v1/links',{method:'POST',body:{client_id:c.id,title:host||'Link',url:s.url,position:nextPos(links)}});
+            }
+            await api('/rest/v1/submissions?id=eq.'+s.id,{method:'DELETE'});
+            toast('Added to the page ✔','ok'); await refreshCurrent();
+          })}),
+          h('button',{class:'btn danger',text:'Reject',onclick:wrap(async function(){
+            await api('/rest/v1/submissions?id=eq.'+s.id,{method:'DELETE'}); toast('Removed','ok'); await refreshCurrent();
+          })})
+        ])
+      ])]));
+    });
+    root.appendChild(icard);
+  }
+
+  /* reorder: swap the position numbers of two neighbours */
+  function miniBtns(arr,i,table){
+    var col=h('div',{class:'col'});
+    [['↑',-1],['↓',1]].forEach(function(x){
+      col.appendChild(h('button',{class:'mini',text:x[0],onclick:wrap(async function(){
+        var j=i+x[1]; if(j<0||j>=arr.length) return;
+        var a=arr[i], b=arr[j], pa=a.position, pb=b.position;
+        if(pa===pb){ pb=pa+x[1]; }
+        await api('/rest/v1/'+table+'?id=eq.'+a.id,{method:'PATCH',body:{position:pb}});
+        await api('/rest/v1/'+table+'?id=eq.'+b.id,{method:'PATCH',body:{position:pa}});
+        await openClient(state.curId);
+      })}));
+    });
+    col.appendChild(h('button',{class:'mini',text:'✕',onclick:wrap(async function(){
+      if(!confirm('Remove this?')) return;
+      await api('/rest/v1/'+table+'?id=eq.'+arr[i].id,{method:'DELETE'}); toast('Removed','ok'); await openClient(state.curId);
+    })}));
+    return col;
+  }
+
+  async function start(){
+    try{
+      await loadClients();
+      state.curId=null; state.cur=null;
+      if(state.clients.length) await openClient(state.clients[0].id); else renderMain();
+    }catch(e){
+      if(session){
+        app.innerHTML='';
+        app.appendChild(h('div',{class:'login'},[h('div',{class:'card'},[
+          h('h2',{text:'Could not load your data'}),
+          h('p',{class:'muted',text:(e.message||'Unknown error')+'  — Did you run setup.sql in Supabase and use the right URL/key in settings.js?'}),
+          h('div',{class:'btns'},[h('button',{class:'btn',text:'Log out',onclick:function(){logout(false);}})])
+        ])]));
+      }
+    }
+  }
+
+  if(!S.supabaseUrl||!S.supabaseKey){ renderSetupNeeded(); }
+  else if(session){ start().then(function(){ if(!session) renderLogin(); }); }
+  else { renderLogin(); }
+})();
+</script>
+</body>
+</html>

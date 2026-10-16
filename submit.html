@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Send your links</title>
+<meta name="theme-color" content="#070b1a">
+<style>
+  :root{--bg:#070b1a;--bg2:#0d1430;--text:#eef2ff;--muted:#98a2c7;--blue:#3b82f6;--purple:#8b5cf6;--cyan:#22d3ee;--glass:rgba(255,255,255,.06);--glass-b:rgba(255,255,255,.12);--grad:linear-gradient(135deg,var(--blue),var(--purple))}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:radial-gradient(1000px 600px at 50% -10%,var(--bg2),var(--bg));color:var(--text);min-height:100vh;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+  .wrap{max-width:560px;margin:0 auto;padding:48px 18px 60px}
+  .card{background:var(--glass);border:1px solid var(--glass-b);border-radius:20px;padding:24px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+  h1{font-size:24px;font-weight:800;margin-bottom:6px}
+  p.sub{color:var(--muted);line-height:1.55;font-size:15px;margin-bottom:18px}
+  label{display:block;font-size:13px;color:var(--muted);margin:14px 0 6px;font-weight:600}
+  textarea,input{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--glass-b);background:rgba(255,255,255,.05);color:var(--text);font:inherit;font-size:15px}
+  textarea{min-height:150px;resize:vertical}
+  textarea:focus,input:focus{outline:none;border-color:var(--purple)}
+  button{margin-top:18px;width:100%;padding:14px;border:0;border-radius:12px;background:var(--grad);color:#fff;font:inherit;font-weight:700;font-size:16px;cursor:pointer;box-shadow:0 8px 24px rgba(139,92,246,.35)}
+  button:disabled{opacity:.6;cursor:wait}
+  #status{margin-top:16px;font-size:14px;line-height:1.5;min-height:20px}
+  .ok{color:#4ade80}.bad{color:#f87171}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card" id="card">
+    <h1 id="title">Send your links</h1>
+    <p class="sub">Paste the <b>share links</b> of your posts or videos (Instagram, YouTube, TikTok), one per line. You can also add other links like your profile. I'll add them to your page.</p>
+    <label for="links">Your links (one per line)</label>
+    <textarea id="links" placeholder="https://www.instagram.com/reel/...&#10;https://www.youtube.com/watch?v=...&#10;https://www.tiktok.com/@you/video/..."></textarea>
+    <label for="note">Note for me (optional)</label>
+    <input id="note" maxlength="300" placeholder="e.g. put the YouTube video first">
+    <button id="send">Send</button>
+    <div id="status" role="status"></div>
+  </div>
+</div>
+
+<script src="settings.js"></script>
+<script>
+(function(){
+  'use strict';
+  var S=window.SITE_SETTINGS||{};
+  var q=new URLSearchParams(location.search);
+  var slug=(q.get('c')||'').toLowerCase().replace(/[^a-z0-9_-]/g,'');
+  var code=(q.get('code')||'').replace(/[^a-zA-Z0-9]/g,'');
+  function $(id){return document.getElementById(id);}
+  function setStatus(t,cls){ var s=$('status'); s.textContent=t; s.className=cls||''; }
+
+  if(!S.supabaseUrl||!S.supabaseKey||!slug||!code){
+    $('card').innerHTML='<h1>This link is not complete</h1><p class="sub">Please ask for your personal link again.</p>';
+    return;
+  }
+  var base=S.supabaseUrl.replace(/\/+$/,'');
+
+  // friendly greeting (optional - ignore if it fails)
+  fetch(base+'/rest/v1/clients?slug=eq.'+encodeURIComponent(slug)+'&select=name',{headers:{apikey:S.supabaseKey}})
+    .then(function(r){return r.ok?r.json():[];}).then(function(rows){
+      if(rows[0]&&rows[0].name) $('title').textContent='Hi '+rows[0].name+', send your links';
+    }).catch(function(){});
+
+  $('send').onclick=function(){
+    var urls=($('links').value.match(/https?:\/\/[^\s"'<>]+/g)||[]).filter(function(u,i,a){return a.indexOf(u)===i;}).slice(0,25);
+    if(!urls.length){ setStatus('Please paste at least one link (it must start with https://).','bad'); return; }
+    var note=$('note').value.trim().slice(0,300);
+    var btn=$('send'); btn.disabled=true; setStatus('Sending…','');
+    var done=0, failed=0, i=0;
+    function next(){
+      if(i>=urls.length){
+        btn.disabled=false;
+        if(!failed){ setStatus('✔ Sent '+done+' link(s). Thank you! I will add them to your page soon.','ok'); $('links').value=''; }
+        else if(done){ setStatus('Sent '+done+' link(s), but '+failed+' failed. Please check your personal link and try again.','bad'); }
+        else { setStatus('Could not send. Please check that you are using your personal link.','bad'); }
+        return;
+      }
+      var u=urls[i++];
+      fetch(base+'/rest/v1/rpc/submit_link',{
+        method:'POST',
+        headers:{apikey:S.supabaseKey,'Content-Type':'application/json'},
+        body:JSON.stringify({p_slug:slug,p_code:code,p_url:u,p_note:note})
+      }).then(function(r){ if(r.ok) done++; else failed++; }).catch(function(){ failed++; }).then(next);
+    }
+    next();
+  };
+})();
+</script>
+</body>
+</html>
